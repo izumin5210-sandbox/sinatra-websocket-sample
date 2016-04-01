@@ -1,24 +1,25 @@
-require 'sinatra'
-require 'sinatra-websocket'
+require 'bundler'
+Bundler.require
 
 set :server, 'thin'
-set :sockets, []
+set :sockets, Hash.new { |h, k| h[k] = [] }
 
-get '/' do
+get '/:id' do
+  @id = params[:id]
   if !request.websocket?
     erb :index
   else
     request.websocket do |ws|
       ws.onopen do
         ws.send("Hello World!")
-        settings.sockets << ws
+        settings.sockets[@id] << ws
       end
       ws.onmessage do |msg|
-        EM.next_tick { settings.sockets.each{|s| s.send(msg) } }
+        EM.next_tick { settings.sockets[@id].each{|s| s.send(msg) } }
       end
       ws.onclose do
         warn("websocket closed")
-        settings.sockets.delete(ws)
+        settings.sockets[@id].delete(ws)
       end
     end
   end
@@ -28,7 +29,7 @@ __END__
 @@ index
 <html>
   <body>
-     <h1>Simple Echo & Chat Server</h1>
+     <h1>Simple Echo & Chat Server (<%= @id %>)</h1>
      <form id="form">
        <input type="text" id="input" value="send a message"></input>
      </form>
