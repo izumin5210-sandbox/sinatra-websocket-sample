@@ -1,30 +1,50 @@
+# Bundler.requireをするとGemfileにあるファイルがすべてrequireされる
 require 'bundler'
 Bundler.require
 
+# WebSocket用にマルチスレッド対応サーバであるthinを利用する（標準はWebrick）
 set :server, 'thin'
+# socketオブジェクトを管理するためのハッシュ
+# roomのidがキーになっている
 set :sockets, Hash.new { |h, k| h[k] = [] }
 
 get '/:id' do
+  # room idを取り出し
   @id = params[:id]
+
   if !request.websocket?
+    # websocketのリクエストじゃないときはindex.erb返す
     erb :index
   else
+    # websocketのリクエストだった時
     request.websocket do |ws|
+      # websocketのコネクションが開かれたとき
       ws.onopen do
+        # 最初のメッセージ送信
         ws.send("Hello World!")
+        # ハッシュにidをキーにして保存
         settings.sockets[@id] << ws
       end
+
+      # websocketのメッセージを受信したとき
       ws.onmessage do |msg|
-        EM.next_tick { settings.sockets[@id].each{|s| s.send(msg) } }
+        EM.next_tick do
+          # 同じidにつながってるクライアントすべてにメッセージ送信
+          settings.sockets[@id].each{|s| s.send(msg) }
+        end
       end
+
+      # websocketのコネクションが閉じられたとき
       ws.onclose do
         warn("websocket closed")
+        # socketをハッシュから削除する
         settings.sockets[@id].delete(ws)
       end
     end
   end
 end
 
+# ここから下はindex.erb
 __END__
 @@ index
 <html>
