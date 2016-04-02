@@ -2,6 +2,9 @@
 require 'bundler'
 Bundler.require
 
+# hashとto_jsonするために必要
+require 'json'
+
 # WebSocket用にマルチスレッド対応サーバであるthinを利用する（標準はWebrick）
 set :server, 'thin'
 # socketオブジェクトを管理するためのハッシュ
@@ -11,6 +14,9 @@ set :sockets, Hash.new { |h, k| h[k] = [] }
 get '/:id' do
   # room idを取り出し
   @id = params[:id]
+
+  # current_userのidとnameとかはここで変数に入れとくと便利
+  user_attrs = { id: 1, name: "izumin" }
 
   if !request.websocket?
     # websocketのリクエストじゃないときはindex.erb返す
@@ -30,7 +36,11 @@ get '/:id' do
       ws.onmessage do |msg|
         EM.next_tick do
           # 同じidにつながってるクライアントすべてにメッセージ送信
-          settings.sockets[@id].each{|s| s.send(msg) }
+          settings.sockets[@id].each do |s|
+            # DBからuserとりだして，user.idとuser.nameとmsgをjsonの文字列にする
+            # 発言をDBに格納するのもココで！
+            s.send({ user: user_attrs, body: msg }.to_json)
+          end
         end
       end
 
@@ -66,7 +76,12 @@ __END__
         var ws       = new WebSocket('ws://' + window.location.host + window.location.pathname);
         ws.onopen    = function()  { show('websocket opened'); };
         ws.onclose   = function()  { show('websocket closed'); }
-        ws.onmessage = function(m) { show('websocket message: ' +  m.data); };
+        ws.onmessage = function(m) {
+          // メッセージ文字列ををJSONとしてパースする
+          data = JSON.parse(m.data);
+          // パース後のjsonからuser.nameとbodyを取り出し
+          show(data.user.name + ': ' + data.body);
+        };
 
         var sender = function(f){
           var input     = document.getElementById('input');
